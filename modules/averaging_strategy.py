@@ -292,6 +292,16 @@ async def get_tp_orders_from_exchange(client: 'SpotClient', token_name: str) -> 
             if order_status == 0 and len(status_0_samples) < 3:
                 status_0_samples.append(order)
             
+            # ВАЖНО: Проверяем filled_output_amount - API Kamino не всегда обновляет status!
+            # Ордер может иметь status=0, но уже быть исполненным (filled_output_amount > 0)
+            filled_output = order.get('filled_output_amount')
+            filled_input = order.get('filled_input_amount')
+            
+            if filled_output and filled_output > 0:
+                # Ордер уже исполнен, хотя status может быть 0
+                filtered_by_status += 1
+                continue
+            
             if isinstance(order_status, int):
                 # Числовые статусы (из API):
                 # 0 = pending (активный)
