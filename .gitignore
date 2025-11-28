@@ -208,9 +208,10 @@ __marimo__/
 
 # private
 input_data/*
+!!stat/.tmp/.tmp
 
 # stat directory contents (but keep the directory itself)
 stat/*
-!stat/.gitkeep
+!stat/.tmp
 
-ranger.code-workspace
+*.code-workspace
