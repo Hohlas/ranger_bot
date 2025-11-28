@@ -208,7 +208,7 @@ __marimo__/
 
 # private
 input_data/*
-!!stat/.tmp/.tmp
+!input_data/.tmp
 
 # stat directory contents (but keep the directory itself)
 stat/*
