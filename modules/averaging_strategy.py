@@ -811,7 +811,11 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                         # Для новых TP (в реальном времени) балансы будут актуальные
                         usdc_balance = await client.get_usdc_balance()
                         token_balance = await client.get_token_balance(token_name)
-                        total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                        # Пересчитываем limit_orders после исполнения TP
+                        current_tp_orders = await get_tp_orders_from_exchange(client, token_name)
+                        limit_orders_value = calculate_limit_orders_value(current_tp_orders)
+                        limit_orders_list = format_limit_orders_list(current_tp_orders)
+                        total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                         
                         # Логируем прибыль
                         client.log_message(
@@ -948,7 +952,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             # Получаем актуальный баланс после покупки
                             usdc_balance = await client.get_usdc_balance()
                             token_balance = await client.get_token_balance(token_name)
-                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                             
                             # Записываем статистику First Position СНАЧАЛА
                             await log_statistics_to_excel(
@@ -977,7 +981,11 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             # Получаем актуальный баланс после создания TP (может измениться из-за комиссий)
                             usdc_balance = await client.get_usdc_balance()
                             token_balance = await client.get_token_balance(token_name)
-                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                            # После создания нового TP ордера, пересчитываем список TP ордеров
+                            current_tp_orders = await get_tp_orders_from_exchange(client, token_name)
+                            limit_orders_value = calculate_limit_orders_value(current_tp_orders)
+                            limit_orders_list = format_limit_orders_list(current_tp_orders)
+                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                             
                             # Логируем TP
                             if tp_order:
@@ -1064,7 +1072,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             # Получаем актуальный баланс после покупки
                             usdc_balance = await client.get_usdc_balance()
                             token_balance = await client.get_token_balance(token_name)
-                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                             
                             # Записываем статистику Averaging СНАЧАЛА
                             await log_statistics_to_excel(
@@ -1093,7 +1101,11 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             # Получаем актуальный баланс после создания TP
                             usdc_balance = await client.get_usdc_balance()
                             token_balance = await client.get_token_balance(token_name)
-                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                            # После создания нового TP ордера, пересчитываем список TP ордеров
+                            current_tp_orders = await get_tp_orders_from_exchange(client, token_name)
+                            limit_orders_value = calculate_limit_orders_value(current_tp_orders)
+                            limit_orders_list = format_limit_orders_list(current_tp_orders)
+                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                             
                             # Логируем TP
                             if tp_order:
@@ -1180,7 +1192,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             # Получаем актуальный баланс после покупки
                             usdc_balance = await client.get_usdc_balance()
                             token_balance = await client.get_token_balance(token_name)
-                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                             
                             # Записываем статистику Pyramiding СНАЧАЛА
                             await log_statistics_to_excel(
@@ -1209,7 +1221,11 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             # Получаем актуальный баланс после создания TP
                             usdc_balance = await client.get_usdc_balance()
                             token_balance = await client.get_token_balance(token_name)
-                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price))
+                            # После создания нового TP ордера, пересчитываем список TP ордеров
+                            current_tp_orders = await get_tp_orders_from_exchange(client, token_name)
+                            limit_orders_value = calculate_limit_orders_value(current_tp_orders)
+                            limit_orders_list = format_limit_orders_list(current_tp_orders)
+                            total_value = float(usdc_balance) + (float(token_balance) * float(current_price)) + limit_orders_value
                             
                             # Логируем TP
                             if tp_order:
@@ -1254,11 +1270,18 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                 import time
                 current_time = time.time()
                 if current_time - last_heartbeat_time >= 600:  # 10 минут = 600 секунд
-                    client.log_message(
-                        f"💚 {client.sol_wallet.label}: Active | Price: ${current_price:.0f} | TPs: {len(current_tp_orders)} | "
-                        f"Balance: ${usdc_balance:.2f} + {token_balance:.6f} {token_name} = ${total_value:.2f}",
-                        level="INFO"
-                    )
+                    if limit_orders_value > 0:
+                        client.log_message(
+                            f"💚 {client.sol_wallet.label}: Active | Price: ${current_price:.0f} | TPs: {len(current_tp_orders)} | "
+                            f"Balance: ${usdc_balance:.2f} + {token_balance:.6f} {token_name} + ${limit_orders_value:.0f} Limit Orders = ${total_value:.2f}",
+                            level="INFO"
+                        )
+                    else:
+                        client.log_message(
+                            f"💚 {client.sol_wallet.label}: Active | Price: ${current_price:.0f} | TPs: {len(current_tp_orders)} | "
+                            f"Balance: ${usdc_balance:.2f} + {token_balance:.6f} {token_name} = ${total_value:.2f}",
+                            level="INFO"
+                        )
                     last_heartbeat_time = current_time
                 
                 # Увеличиваем счётчик итераций в конце успешной обработки
