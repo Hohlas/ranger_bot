@@ -269,6 +269,11 @@ async def get_tp_orders_from_exchange(client: 'SpotClient', token_name: str) -> 
         filtered_by_status = 0
         filtered_by_tokens = 0
         filtered_by_wallet = 0
+        filtered_by_age = 0
+        
+        # Текущее время для проверки возраста ордеров
+        import time
+        current_time = time.time()
         
         # Фильтруем только наши ордера (token -> USDC от нашего кошелька)
         for order in exchange_orders:
@@ -321,6 +326,16 @@ async def get_tp_orders_from_exchange(client: 'SpotClient', token_name: str) -> 
             if tokens_match and wallet_match:
                 # Извлекаем данные
                 order_id = order.get('limit_order_account_address') or order.get('order_id')
+                
+                # Проверяем возраст ордера - фильтруем старые "фантомные" ордера
+                # API может хранить старые ордера со status=0, которые уже не существуют на блокчейне
+                created_at = order.get('created_at', 0)
+                if created_at > 0:
+                    order_age_seconds = current_time - (created_at / 1000)  # created_at в миллисекундах
+                    # Пропускаем ордера старше 7 дней (возможно "фантомные")
+                    if order_age_seconds > 604800:  # 7 дней = 604800 секунд
+                        filtered_by_age += 1
+                        continue
                 
                 # Рассчитываем параметры из API ответа
                 initial_input_amount = order.get('initial_input_amount', 0)
@@ -376,7 +391,7 @@ async def get_tp_orders_from_exchange(client: 'SpotClient', token_name: str) -> 
                 level="INFO"
             )
             client.log_message(
-                f"   🔻 Filtered out: {filtered_by_status} by status, {filtered_by_tokens} by tokens, {filtered_by_wallet} by wallet",
+                f"   🔻 Filtered out: {filtered_by_status} by status, {filtered_by_tokens} by tokens, {filtered_by_wallet} by wallet, {filtered_by_age} by age (>7 days)",
                 level="INFO"
             )
             
