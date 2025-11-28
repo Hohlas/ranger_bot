@@ -392,6 +392,7 @@ async def check_executed_limit_orders(client: 'SpotClient', token_name: str,
         # Инициализируем кэш предыдущих исполненных ордеров
         if not hasattr(client, '_previous_filled_order_ids'):
             client._previous_filled_order_ids = set()
+            client._orders_cache_initialized = False
         
         # Получаем ВСЕ лимитные ордера (открытые + исполненные)
         all_orders = await client.browser.get_open_limit_orders()
@@ -426,6 +427,11 @@ async def check_executed_limit_orders(client: 'SpotClient', token_name: str,
             
             if order_age_seconds > 1800:  # 30 минут = 1800 секунд
                 continue  # Пропускаем старые ордера
+            
+            # При первой инициализации кэша просто добавляем все ордера без обработки
+            if not client._orders_cache_initialized:
+                client._previous_filled_order_ids.add(order_id)
+                continue
             
             # Пропускаем уже обработанные
             if order_id in client._previous_filled_order_ids:
@@ -469,6 +475,10 @@ async def check_executed_limit_orders(client: 'SpotClient', token_name: str,
             client._previous_filled_order_ids = set(
                 list(client._previous_filled_order_ids)[-25:]
             )
+        
+        # Помечаем кэш как инициализированный после первого прохода
+        if not client._orders_cache_initialized:
+            client._orders_cache_initialized = True
                 
     except Exception as e:
         client.log_message(
@@ -769,14 +779,16 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                         # Если это первый аккаунт, запускаем задачу отправки сообщения
                         if len(_startup_balances) == 1:
                             asyncio.create_task(send_combined_startup_message())
-                    
-                    iteration_count += 1
                 
                 # НЕ логируем состояние каждую итерацию - только события!
                 previous_state = current_state.copy()
                 
                 # Проверяем исполненные лимитные ордера (сравнение состояний)
-                executed_orders = await check_executed_limit_orders(client, token_name, current_tp_orders)
+                # НЕ проверяем при первом запуске (iteration_count == 0), чтобы избежать дублирования старых сообщений
+                if iteration_count > 0:
+                    executed_orders = await check_executed_limit_orders(client, token_name, current_tp_orders)
+                else:
+                    executed_orders = []
                 
                 # Обрабатываем исполненные ордера
                 for i, executed_order in enumerate(executed_orders):
@@ -1248,6 +1260,9 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                         level="INFO"
                     )
                     last_heartbeat_time = current_time
+                
+                # Увеличиваем счётчик итераций в конце успешной обработки
+                iteration_count += 1
                 
                 # Ждем перед следующей итерацией
                 await async_sleep(10)

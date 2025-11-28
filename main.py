@@ -99,7 +99,8 @@ async def run_module(mode: int, module_data: dict, sem: asyncio.Semaphore):
 
                     if sol_wallet:
                         reports = await db.get_account_reports(sol_encoded_pk=sol_wallet.encoded_pk, mode=mode)
-                        if reports:
+                        # Не отправляем пустые отчёты "No actions"
+                        if reports and "No actions" not in reports:
                             await TgReport().send_log(logs=reports)
 
                     if module_data["module_info"]["status"] is True:
