@@ -1153,6 +1153,18 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                         await async_sleep(10)
                         continue
                     
+                    # Диагностика перед покупкой
+                    expected_token_amount = position_size / current_price
+                    client.log_message(
+                        f"🔍 {client.sol_wallet.label}: Market order diagnostics:\n"
+                        f"   💵 USDC Balance: ${usdc_balance:.2f}\n"
+                        f"   📊 Position Size: ${position_size:.2f}\n"
+                        f"   💰 Current Price: ${current_price:.2f}\n"
+                        f"   🎯 Expected {token_name}: {expected_token_amount:.8f}\n"
+                        f"   ⚖️ Min BTC: {settings.MIN_ORDER_SIZE_BTC} | Min Notional: ${settings.MIN_ORDER_NOTIONAL}",
+                        level="INFO"
+                    )
+                    
                     try:
                         # Выполняем покупку
                         buy_result = await client.place_market_order(
@@ -1280,6 +1292,18 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             )
                         await async_sleep(10)
                         continue
+                    
+                    # Диагностика перед покупкой
+                    expected_token_amount = position_size / current_price
+                    client.log_message(
+                        f"🔍 {client.sol_wallet.label}: Market order diagnostics:\n"
+                        f"   💵 USDC Balance: ${usdc_balance:.2f}\n"
+                        f"   📊 Position Size: ${position_size:.2f}\n"
+                        f"   💰 Current Price: ${current_price:.2f}\n"
+                        f"   🎯 Expected {token_name}: {expected_token_amount:.8f}\n"
+                        f"   ⚖️ Min BTC: {settings.MIN_ORDER_SIZE_BTC} | Min Notional: ${settings.MIN_ORDER_NOTIONAL}",
+                        level="INFO"
+                    )
                     
                     try:
                         # Выполняем покупку
