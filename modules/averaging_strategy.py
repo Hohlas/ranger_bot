@@ -67,7 +67,11 @@ async def send_combined_startup_message():
         
         for label, balance_info in _startup_balances.items():
             start_msg += f"<b>{label}:</b>\n"
-            start_msg += f"💰 {balance_info['usdc']:.0f} USDC + {balance_info['token']:.6f} {balance_info['token_name']} = ${balance_info['total']:.0f}\n\n"
+            limit_orders = balance_info.get('limit_orders', 0)
+            if limit_orders > 0:
+                start_msg += f"💰 {balance_info['usdc']:.0f} USDC + {balance_info['token']:.6f} {balance_info['token_name']} + ${limit_orders:.0f} Limit Orders = ${balance_info['total']:.0f}\n\n"
+            else:
+                start_msg += f"💰 {balance_info['usdc']:.0f} USDC + {balance_info['token']:.6f} {balance_info['token_name']} = ${balance_info['total']:.0f}\n\n"
         
         # Отправляем через TgReport
         try:
@@ -527,9 +531,34 @@ def calculate_limit_orders_value(current_tp_orders: list) -> float:
     return total
 
 
+def format_limit_orders_list(current_tp_orders: list) -> str:
+    """
+    Форматирует список активных лимитных ордеров в строку,
+    отсортированную по возрастанию цены.
+    
+    Args:
+        current_tp_orders: Список активных TP ордеров
+            [{'amount': float, 'tp_price': float, ...}, ...]
+    
+    Returns:
+        str: Отформатированный список ордеров, например: "$98000, $99000, $100000" или ""
+    """
+    if not current_tp_orders:
+        return ""
+    
+    # Сортируем по цене
+    sorted_orders = sorted(current_tp_orders, key=lambda x: x.get('tp_price', 0))
+    
+    # Форматируем список цен
+    prices = [f"${order.get('tp_price', 0):.0f}" for order in sorted_orders]
+    
+    return ", ".join(prices)
+
+
 async def log_statistics_to_excel(client: SpotClient, operation: str, token_amount: float,
                                   price: float, current_market_price: float, usdc_balance: float, 
-                                  token_balance: float, limit_orders_value: float, total_value: float):
+                                  token_balance: float, limit_orders_value: float, 
+                                  limit_orders_list: str, total_value: float):
     """
     Записывает статистику операции в отдельный Excel файл для каждого аккаунта.
     Формат файла: stat/{account_label}_stat.xlsx
@@ -557,6 +586,7 @@ async def log_statistics_to_excel(client: SpotClient, operation: str, token_amou
             'USDC Balance': usdc_balance,
             'Token Balance': token_balance,
             'Limit Orders': limit_orders_value,
+            'Limit Orders List': limit_orders_list,
             'Total Value': total_value
         }
         
@@ -574,7 +604,8 @@ async def log_statistics_to_excel(client: SpotClient, operation: str, token_amou
         else:
             df = pd.DataFrame(columns=[
                 'Timestamp', 'Account', 'Current Price', 'Operation', 'Token Amount',
-                'Operation Price', 'USDC Balance', 'Token Balance', 'Limit Orders', 'Total Value'
+                'Operation Price', 'USDC Balance', 'Token Balance', 'Limit Orders', 
+                'Limit Orders List', 'Total Value'
             ])
         
         # Добавляем новую строку
@@ -700,6 +731,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                 
                 # Рассчитываем стоимость лимитных ордеров (один раз для всей итерации)
                 limit_orders_value = calculate_limit_orders_value(current_tp_orders)
+                limit_orders_list = format_limit_orders_list(current_tp_orders)
                 
                 # Получаем текущую цену
                 current_price = await client.get_current_price(token_name)
@@ -729,6 +761,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             'usdc': float(usdc_balance),
                             'token': float(token_balance),
                             'token_name': token_name,
+                            'limit_orders': limit_orders_value,
                             'total': total_value,
                             'client': client
                         }
@@ -776,10 +809,16 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                         )
                         
                         # Формируем сообщение о профите
-                        profit_message = (
-                            f"🎯 <b>{client.sol_wallet.label}: Profit ${real_profit:.2f}</b> | "
-                            f"${usdc_balance:.2f}USDC + {token_balance:.6f}{token_name} = ${total_value:.2f}"
-                        )
+                        if limit_orders_value > 0:
+                            profit_message = (
+                                f"🎯 <b>{client.sol_wallet.label}: Profit ${real_profit:.2f}</b> | "
+                                f"${usdc_balance:.2f}USDC + {token_balance:.6f}{token_name} + ${limit_orders_value:.0f} Limit Orders = ${total_value:.2f}"
+                            )
+                        else:
+                            profit_message = (
+                                f"🎯 <b>{client.sol_wallet.label}: Profit ${real_profit:.2f}</b> | "
+                                f"${usdc_balance:.2f}USDC + {token_balance:.6f}{token_name} = ${total_value:.2f}"
+                            )
                         
                         # Отправляем в ОСНОВНОЙ бот
                         await send_tg_notification(client, profit_message, save_to_report=False)
@@ -797,6 +836,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             usdc_balance=float(usdc_balance),
                             token_balance=float(token_balance),
                             limit_orders_value=limit_orders_value,
+                            limit_orders_list=limit_orders_list,
                             total_value=total_value
                         )
                         
@@ -908,6 +948,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                                 usdc_balance=float(usdc_balance),
                                 token_balance=float(token_balance),
                                 limit_orders_value=limit_orders_value,
+                                limit_orders_list=limit_orders_list,
                                 total_value=total_value
                             )
                             
@@ -943,6 +984,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                                     usdc_balance=float(usdc_balance),
                                     token_balance=float(token_balance),
                                     limit_orders_value=limit_orders_value,
+                                    limit_orders_list=limit_orders_list,
                                     total_value=total_value
                                 )
                             else:
@@ -1022,6 +1064,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                                 usdc_balance=float(usdc_balance),
                                 token_balance=float(token_balance),
                                 limit_orders_value=limit_orders_value,
+                                limit_orders_list=limit_orders_list,
                                 total_value=total_value
                             )
                             
@@ -1057,6 +1100,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                                     usdc_balance=float(usdc_balance),
                                     token_balance=float(token_balance),
                                     limit_orders_value=limit_orders_value,
+                                    limit_orders_list=limit_orders_list,
                                     total_value=total_value
                                 )
                             else:
@@ -1136,6 +1180,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                                 usdc_balance=float(usdc_balance),
                                 token_balance=float(token_balance),
                                 limit_orders_value=limit_orders_value,
+                                limit_orders_list=limit_orders_list,
                                 total_value=total_value
                             )
                             
@@ -1171,6 +1216,7 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                                     usdc_balance=float(usdc_balance),
                                     token_balance=float(token_balance),
                                     limit_orders_value=limit_orders_value,
+                                    limit_orders_list=limit_orders_list,
                                     total_value=total_value
                                 )
                             else:
