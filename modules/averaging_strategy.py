@@ -288,17 +288,21 @@ async def get_tp_orders_from_exchange(client: 'SpotClient', token_name: str) -> 
             status_key = f"status_{order_status}" if order_status is not None else "status_None"
             status_counts[status_key] = status_counts.get(status_key, 0) + 1
             
-            # Сохраняем первые 3 ордера со status=0 для детального анализа
-            if order_status == 0 and len(status_0_samples) < 3:
+            # Сохраняем ВСЕ ордера со status=0 для детального анализа
+            if order_status == 0:
                 status_0_samples.append(order)
             
             # ВАЖНО: Проверяем filled_output_amount - API Kamino не всегда обновляет status!
             # Ордер может иметь status=0, но уже быть исполненным (filled_output_amount > 0)
             filled_output = order.get('filled_output_amount')
             filled_input = order.get('filled_input_amount')
+            expected_output = order.get('expected_output_amount', 0)
             
+            # Фильтруем если:
+            # 1. filled_output_amount > 0 (что-то уже исполнено)
+            # 2. filled_output_amount >= expected_output_amount (полностью исполнен)
             if filled_output and filled_output > 0:
-                # Ордер уже исполнен, хотя status может быть 0
+                # Ордер уже исполнен (полностью или частично), хотя status=0
                 filtered_by_status += 1
                 continue
             
@@ -405,29 +409,26 @@ async def get_tp_orders_from_exchange(client: 'SpotClient', token_name: str) -> 
                 level="INFO"
             )
             
-            # Выводим детали первых 3 ордеров со status=0 из API
+            # Выводим детали ВСЕХ ордеров со status=0 из API (компактный формат)
             client.log_message(
-                f"   🔬 API RAW DATA - First 3 orders with status=0:",
+                f"   🔬 API RAW DATA - ALL {len(status_0_samples)} orders with status=0:",
                 level="INFO"
             )
-            import json
             for i, raw_order in enumerate(status_0_samples, 1):
-                # Форматируем JSON для читаемости, убираем лишние поля
-                relevant_fields = {
-                    'order_id': raw_order.get('limit_order_account_address', raw_order.get('order_id', 'N/A'))[:20],
-                    'status': raw_order.get('status'),
-                    'created_at': raw_order.get('created_at'),
-                    'last_updated': raw_order.get('last_updated_timestamp'),
-                    'input_mint': raw_order.get('input_mint', '')[:10],
-                    'output_mint': raw_order.get('output_mint', '')[:10],
-                    'initial_input_amount': raw_order.get('initial_input_amount'),
-                    'expected_output_amount': raw_order.get('expected_output_amount'),
-                    'filled_input_amount': raw_order.get('filled_input_amount'),
-                    'filled_output_amount': raw_order.get('filled_output_amount'),
-                    'user_wallet': raw_order.get('user_wallet_address', raw_order.get('owner', ''))[:10]
-                }
+                order_id_short = raw_order.get('limit_order_account_address', raw_order.get('order_id', 'N/A'))[:12]
+                initial = raw_order.get('initial_input_amount', 0)
+                expected = raw_order.get('expected_output_amount', 0)
+                filled_out = raw_order.get('filled_output_amount', 0)
+                filled_in = raw_order.get('filled_input_amount', 0)
+                
+                # Рассчитываем цену
+                price = (expected / 10**6) / (initial / 10**8) if initial > 0 else 0
+                
+                # Помечаем исполненные
+                filled_mark = " ❌FILLED" if filled_out and filled_out > 0 else " ✅ACTIVE"
+                
                 client.log_message(
-                    f"      Order {i}: {json.dumps(relevant_fields, indent=2)}",
+                    f"      {i:2d}. ID:{order_id_short}... | Price:${price:>8.2f} | In:{initial:>6d} Out:{expected:>8d} | FilledOut:{filled_out}{filled_mark}",
                     level="INFO"
                 )
             

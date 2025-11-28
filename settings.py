@@ -1,5 +1,5 @@
 
-VERSION             = "2.34.0-filled-amount-fix"  # Версия для отслеживания обновлений
+VERSION             = "2.34.2-filled-explained"  # Версия для отслеживания обновлений
 
 # --- AVERAGING/PYRAMIDING STRATEGY SETTINGS ---
 # Параметры стратегии "Усреднение/Пирамидинг" для Spot торговли
