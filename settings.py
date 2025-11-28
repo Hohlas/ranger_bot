@@ -1,5 +1,5 @@
 
-VERSION             = "2.36.1-no-api-logs"  # Версия для отслеживания обновлений
+VERSION             = "2.37.0-debug-market-orders"  # Версия для отслеживания обновлений
 
 # --- AVERAGING/PYRAMIDING STRATEGY SETTINGS ---
 # Параметры стратегии "Усреднение/Пирамидинг" для Spot торговли

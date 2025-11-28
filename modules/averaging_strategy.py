@@ -1161,6 +1161,14 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             amount=position_size
                         )
                         
+                        if not buy_result:
+                            client.log_message(
+                                f"⚠️ {client.sol_wallet.label}: Averaging market order returned empty result",
+                                level="WARNING"
+                            )
+                            await async_sleep(10)
+                            continue
+                        
                         if buy_result:
                             actual_price = Decimal(str(buy_result['price']))
                             token_amount = Decimal(str(buy_result['to_amount']))
@@ -1280,6 +1288,14 @@ async def trade_averaging_strategy(client: SpotClient, token_name: str):
                             to_token=token_name,
                             amount=position_size
                         )
+                        
+                        if not buy_result:
+                            client.log_message(
+                                f"⚠️ {client.sol_wallet.label}: Pyramiding market order returned empty result",
+                                level="WARNING"
+                            )
+                            await async_sleep(10)
+                            continue
                         
                         if buy_result:
                             actual_price = Decimal(str(buy_result['price']))
